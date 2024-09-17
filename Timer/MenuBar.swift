@@ -6,11 +6,23 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 enum TimerStatus: String {
   case idle
   case running
   case finished
+}
+
+func getNotificationPermission() {
+  UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge]) { success, error in
+    print("in getnotper")
+    if success {
+      print("All set")
+    } else if let error {
+      print("error: \(error.localizedDescription)")
+    }
+  }
 }
 
 struct PressableButtonStyle: ButtonStyle {
@@ -21,7 +33,7 @@ struct PressableButtonStyle: ButtonStyle {
       .background(.red)
       .opacity(0.8)
       .clipShape(Capsule())
-      .shadow(color: .purple, radius: 5, x: 0, y: 0)
+      .shadow(color: .purple, radius: 3, x: 0, y: 0)
   }
 }
 
@@ -39,13 +51,14 @@ struct MenuBar: View {
 
   func startTimer() {
     stopTimer()
+    print("starting")
     status = .running
-    
+
     guard timerValue > 0 else {
       print("Timer value must be positive")
       return
     }
-    
+
     timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
       if timerValue > 0 {
         withAnimation {
@@ -53,10 +66,15 @@ struct MenuBar: View {
         }
       } else {
         self.stopTimer()
+        // Show notification immediately
+        let content = UNMutableNotificationContent()
+        content.title = "Timer done"
+        content.subtitle  = "C'est le fin"
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-//          withAnimation {
           status = .idle
-//          }
         }
       }
     }
@@ -67,8 +85,8 @@ struct MenuBar: View {
     timer = nil
     // withAnimation(.spring(response: 0.5, dampingFraction: 0.6, blendDuration: 1.0)) {
 //    withAnimation(.bouncy) {
+    //    }
     status = .finished
-//    }
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
       withAnimation {
         status = .idle
@@ -83,6 +101,11 @@ struct MenuBar: View {
   var body: some View {
     VStack(alignment: .center) {
       HStack(alignment: .center) {
+        Button {
+          getNotificationPermission()
+        } label: {
+          Text("Get permission")
+        }
         HStack {
           Image(systemName: "hourglass.circle.fill")
             .font(.title2)
@@ -126,7 +149,7 @@ struct MenuBar: View {
     }
 //    .animation(.easeInOut(duration: 1), value: status)
 //    .frame(minHeight: 200, maxHeight: status == .finished ? 500 : 200)
-    }
+  }
 }
 
 #Preview {
