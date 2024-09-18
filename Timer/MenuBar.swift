@@ -14,15 +14,25 @@ enum TimerStatus: String {
   case finished
 }
 
-func getNotificationPermission() {
+func getNotificationPermission(completion: @escaping (Bool) -> Void) {
   UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge]) { success, error in
-    print("in getnotper")
     if success {
-      print("All set")
+      completion(true)
     } else if let error {
-      print("error: \(error.localizedDescription)")
+      print("Error getting permissions: \(error.localizedDescription)")
+      completion(false)
+    } else {
+      completion(false)
     }
   }
+}
+
+func fireNotification() {
+  let content = UNMutableNotificationContent()
+  content.title = "Timer done"
+  content.subtitle = "C'est le fin"
+  let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+  UNUserNotificationCenter.current().add(request)
 }
 
 struct PressableButtonStyle: ButtonStyle {
@@ -41,6 +51,7 @@ struct MenuBar: View {
   @State private var timerValue: Double = 0.0
   @State private var timer: Timer?
   @State private var status: TimerStatus = .idle
+  @State private var hasPermission = false
 
   let numberFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
@@ -51,7 +62,6 @@ struct MenuBar: View {
 
   func startTimer() {
     stopTimer()
-    print("starting")
     status = .running
 
     guard timerValue > 0 else {
@@ -66,13 +76,8 @@ struct MenuBar: View {
         }
       } else {
         self.stopTimer()
-        // Show notification immediately
-        let content = UNMutableNotificationContent()
-        content.title = "Timer done"
-        content.subtitle  = "C'est le fin"
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
-        
+        fireNotification()
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
           status = .idle
         }
@@ -83,9 +88,6 @@ struct MenuBar: View {
   func stopTimer() {
     timer?.invalidate()
     timer = nil
-    // withAnimation(.spring(response: 0.5, dampingFraction: 0.6, blendDuration: 1.0)) {
-//    withAnimation(.bouncy) {
-    //    }
     status = .finished
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
       withAnimation {
@@ -93,6 +95,7 @@ struct MenuBar: View {
       }
     }
   }
+  
 
   func onDisappear() {
     stopTimer()
@@ -101,40 +104,44 @@ struct MenuBar: View {
   var body: some View {
     VStack(alignment: .center) {
       HStack(alignment: .center) {
-        Button {
-          getNotificationPermission()
-        } label: {
-          Text("Get permission")
-        }
-        HStack {
-          Image(systemName: "hourglass.circle.fill")
-            .font(.title2)
-          TextField("mins", value: $timerValue, formatter: numberFormatter)
-            .textFieldStyle(RoundedBorderTextFieldStyle())
-            .frame(width: 60)
-            .onSubmit {
-              startTimer()
+        if !hasPermission {
+          Button {
+            getNotificationPermission { isPermissionGranted in
+              hasPermission = isPermissionGranted
             }
-            .disabled(status == .running)
-        }
-
-        Button(action: {
-          startTimer()
-        }, label: {
-          HStack {
-            Image(systemName: "chevron.right")
-              .bold()
-              .foregroundStyle(.primary)
-              .padding(.horizontal, 6)
-              .padding(.vertical, 3)
+          } label: {
+            Text("Get permission")
           }
-        })
-        .buttonStyle(PressableButtonStyle())
-        .disabled(status == .running)
+        } else {
+          HStack {
+            Image(systemName: "hourglass.circle.fill")
+              .font(.title2)
+            TextField("mins", value: $timerValue, formatter: numberFormatter)
+              .textFieldStyle(RoundedBorderTextFieldStyle())
+              .frame(width: 60)
+              .onSubmit {
+                startTimer()
+              }
+              .disabled(status == .running)
+          }
+
+          Button(action: {
+            startTimer()
+          }, label: {
+            HStack {
+              Image(systemName: "chevron.right")
+                .bold()
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+            }
+          })
+          .buttonStyle(PressableButtonStyle())
+          .disabled(status == .running)
+        }
       }
       .padding()
       .onDisappear(perform: onDisappear)
-//      .frame(height: 200)
 
       Spacer()
 
@@ -147,8 +154,11 @@ struct MenuBar: View {
           .transition(.opacity)
       }
     }
-//    .animation(.easeInOut(duration: 1), value: status)
-//    .frame(minHeight: 200, maxHeight: status == .finished ? 500 : 200)
+    .onAppear {
+      getNotificationPermission { isPermissionGranted in
+        hasPermission = isPermissionGranted
+      }
+    }
   }
 }
 
