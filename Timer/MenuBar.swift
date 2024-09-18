@@ -30,7 +30,7 @@ func getNotificationPermission(completion: @escaping (Bool) -> Void) {
 func fireNotification() {
   let content = UNMutableNotificationContent()
   content.title = "Timer done"
-  content.subtitle = "C'est le fin"
+  content.subtitle = "C'est fini"
   let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
   UNUserNotificationCenter.current().add(request)
 }
@@ -52,6 +52,7 @@ struct MenuBar: View {
   @State private var timer: Timer?
   @State private var status: TimerStatus = .idle
   @State private var hasPermission = false
+  @State private var isFinishMsgVisible = false
 
   let numberFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
@@ -90,12 +91,9 @@ struct MenuBar: View {
     timer = nil
     status = .finished
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-      withAnimation {
-        status = .idle
-      }
+      status = .idle
     }
   }
-  
 
   func onDisappear() {
     stopTimer()
@@ -143,20 +141,30 @@ struct MenuBar: View {
       .padding()
       .onDisappear(perform: onDisappear)
 
-      Spacer()
-
       if status == .finished {
         Text("All done")
           .bold()
           .foregroundColor(.pink)
           .padding(.bottom)
           .shadow(color: .purple, radius: 4, x: 0, y: 0)
-          .transition(.opacity)
+          .opacity(isFinishMsgVisible ? 1 : 0)
       }
     }
+    .animation(.easeInOut(duration: 0.5), value: isFinishMsgVisible)
     .onAppear {
       getNotificationPermission { isPermissionGranted in
         hasPermission = isPermissionGranted
+      }
+    }
+    .onChange(of: status) { oldStatus, newStatus in
+      if newStatus == .finished {
+        withAnimation(.easeInOut(duration: 0.5)) {
+          isFinishMsgVisible = true
+        }
+      } else if oldStatus == .finished {
+        withAnimation(.easeInOut(duration: 0.5)) {
+          isFinishMsgVisible = false
+        }
       }
     }
   }
