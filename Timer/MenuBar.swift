@@ -15,7 +15,7 @@ enum TimerStatus: String {
 }
 
 func getNotificationPermission(completion: @escaping (Bool) -> Void) {
-  UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge]) { success, error in
+  UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { success, error in
     if success {
       completion(true)
     } else if let error {
@@ -31,6 +31,7 @@ func fireNotification() {
   let content = UNMutableNotificationContent()
   content.title = "Timer done"
   content.subtitle = "C'est fini"
+  content.sound = .default
   let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
   UNUserNotificationCenter.current().add(request)
 }
