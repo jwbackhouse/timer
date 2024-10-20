@@ -27,9 +27,9 @@ func getNotificationPermission(completion: @escaping (Bool) -> Void) {
   }
 }
 
-func fireNotification() {
+func fireNotification(name: String) {
   let content = UNMutableNotificationContent()
-  content.title = "Timer done"
+  content.title = "Timer done for \(name)"
   content.subtitle = "C'est fini"
   content.sound = .default
   let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
@@ -51,9 +51,11 @@ struct PressableButtonStyle: ButtonStyle {
 struct MenuBar: View {
   @State private var timerValue: Double = 0.0
   @State private var timer: Timer?
-  @State private var status: TimerStatus = .idle
+  @State private var status: [String: TimerStatus] = [:]
   @State private var hasPermission = false
   @State private var isFinishMsgVisible = false
+  
+  let timerId = UUID().uuidString
 
   let numberFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
@@ -62,9 +64,9 @@ struct MenuBar: View {
     return formatter
   }()
 
-  func startTimer() {
-    stopTimer()
-    status = .running
+  func startTimer(name: String) {
+    stopTimer(name: name)
+    status = [name: .running]
 
     guard timerValue > 0 else {
       print("Timer value must be positive")
@@ -77,27 +79,27 @@ struct MenuBar: View {
           self.timerValue -= 1.0
         }
       } else {
-        self.stopTimer()
-        fireNotification()
+        self.stopTimer(name: name)
+        fireNotification(name: name)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-          status = .idle
+          status = [name: .idle]
         }
       }
     }
   }
 
-  func stopTimer() {
+  func stopTimer(name: String) {
     timer?.invalidate()
     timer = nil
-    status = .finished
+    status = [name: .finished]
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-      status = .idle
+      status = [name: .idle]
     }
   }
 
-  func onDisappear() {
-    stopTimer()
+  func onDisappear(name: String) {
+    stopTimer(name: name)
   }
 
   var body: some View {
@@ -119,13 +121,13 @@ struct MenuBar: View {
               .textFieldStyle(RoundedBorderTextFieldStyle())
               .frame(width: 60)
               .onSubmit {
-                startTimer()
+                startTimer(name: timerId)
               }
-              .disabled(status == .running)
+              .disabled(status[timerId] == .running)
           }
 
           Button(action: {
-            startTimer()
+            startTimer(name: timerId)
           }, label: {
             HStack {
               Image(systemName: "chevron.right")
@@ -136,13 +138,13 @@ struct MenuBar: View {
             }
           })
           .buttonStyle(PressableButtonStyle())
-          .disabled(status == .running)
+          .disabled(status[timerId] == .running)
         }
       }
       .padding()
-      .onDisappear(perform: onDisappear)
+//      .onDisappear(perform: onDisappear)
 
-      if status == .finished {
+      if status[timerId] == .finished {
         Text("All done")
           .bold()
           .foregroundColor(.pink)
@@ -158,11 +160,11 @@ struct MenuBar: View {
       }
     }
     .onChange(of: status) { oldStatus, newStatus in
-      if newStatus == .finished {
+      if newStatus[timerId] == .finished {
         withAnimation(.easeInOut(duration: 0.5)) {
           isFinishMsgVisible = true
         }
-      } else if oldStatus == .finished {
+      } else if oldStatus[timerId] == .finished {
         withAnimation(.easeInOut(duration: 0.5)) {
           isFinishMsgVisible = false
         }
