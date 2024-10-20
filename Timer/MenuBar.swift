@@ -1,5 +1,4 @@
 //
-//  MenuBar.swift
 //  Timer
 //
 //  Created by James Backhouse on 10/09/2024.
@@ -48,14 +47,15 @@ struct PressableButtonStyle: ButtonStyle {
   }
 }
 
+let timerId = UUID().uuidString
+
 struct MenuBar: View {
   @State private var timerValue: Double = 0.0
   @State private var timer: Timer?
-  @State private var status: [String: TimerStatus] = [:]
+  @State private var status: [String: TimerStatus] = [timerId: .idle]
   @State private var hasPermission = false
   @State private var isFinishMsgVisible = false
   
-  let timerId = UUID().uuidString
 
   let numberFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
@@ -66,7 +66,8 @@ struct MenuBar: View {
 
   func startTimer(name: String) {
     stopTimer(name: name)
-    status = [name: .running]
+    status[name] = .running
+    print("start timer \(status)")
 
     guard timerValue > 0 else {
       print("Timer value must be positive")
@@ -83,7 +84,7 @@ struct MenuBar: View {
         fireNotification(name: name)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-          status = [name: .idle]
+          status[name] = .idle
         }
       }
     }
@@ -92,9 +93,9 @@ struct MenuBar: View {
   func stopTimer(name: String) {
     timer?.invalidate()
     timer = nil
-    status = [name: .finished]
+    status[name] = .finished
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-      status = [name: .idle]
+      status[name]  = .idle
     }
   }
 
@@ -114,44 +115,59 @@ struct MenuBar: View {
             Text("Get permission")
           }
         } else {
-          HStack {
-            Image(systemName: "hourglass.circle.fill")
-              .font(.title2)
-            TextField("mins", value: $timerValue, formatter: numberFormatter)
-              .textFieldStyle(RoundedBorderTextFieldStyle())
-              .frame(width: 60)
-              .onSubmit {
-                startTimer(name: timerId)
+          VStack {
+            ForEach(Array(status), id: \.key) { key, value in
+              
+              HStack {
+                Image(systemName: "hourglass.circle.fill")
+                  .font(.title2)
+                
+                TextField("mins", value: $timerValue, formatter: numberFormatter)
+                  .textFieldStyle(RoundedBorderTextFieldStyle())
+                  .frame(width: 60)
+                  .onSubmit {
+                    startTimer(name: key)
+                  }
+                  .disabled(status[key] == .running)
+                
+                Button(action: {
+                  startTimer(name: key)
+                }, label: {
+                  HStack {
+                    Image(systemName: "chevron.right")
+                      .bold()
+                      .foregroundStyle(.primary)
+                      .padding(.horizontal, 6)
+                      .padding(.vertical, 3)
+                  }
+                })
+                .buttonStyle(PressableButtonStyle())
+                .disabled(status[key] == .running)
               }
-              .disabled(status[timerId] == .running)
-          }
-
-          Button(action: {
-            startTimer(name: timerId)
-          }, label: {
-            HStack {
-              Image(systemName: "chevron.right")
-                .bold()
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+              
+              if status[timerId] == .finished {
+                Text("All done")
+                  .bold()
+                  .foregroundColor(.pink)
+                  .padding(.bottom)
+                  .shadow(color: .purple, radius: 4, x: 0, y: 0)
+                  .opacity(isFinishMsgVisible ? 1 : 0)
+              }
             }
-          })
-          .buttonStyle(PressableButtonStyle())
-          .disabled(status[timerId] == .running)
+          }
         }
       }
       .padding()
-//      .onDisappear(perform: onDisappear)
+//      .onDisappear(perform: onDisappear(name: name))
 
-      if status[timerId] == .finished {
-        Text("All done")
-          .bold()
-          .foregroundColor(.pink)
-          .padding(.bottom)
-          .shadow(color: .purple, radius: 4, x: 0, y: 0)
-          .opacity(isFinishMsgVisible ? 1 : 0)
-      }
+      Button {
+        let newId = UUID().uuidString
+        status[newId] = .idle
+        
+      } label: {
+        Image(systemName: "plus.circle.fill")
+      }.buttonStyle(PressableButtonStyle())
+        .padding(.bottom)
     }
     .animation(.easeInOut(duration: 0.5), value: isFinishMsgVisible)
     .onAppear {
@@ -174,6 +190,6 @@ struct MenuBar: View {
 }
 
 #Preview {
-  @State var status = TimerStatus.running
+  @Previewable @State var status = TimerStatus.running
   return MenuBar()
 }
