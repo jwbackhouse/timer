@@ -13,11 +13,12 @@ enum TimerStatus: String {
   case finished
 }
 
-
 let numberFormatter: NumberFormatter = {
   let formatter = NumberFormatter()
   formatter.numberStyle = .decimal
   formatter.allowsFloats = true
+  formatter.minimumFractionDigits = 0
+  formatter.maximumFractionDigits = 1
   return formatter
 }()
 
@@ -37,8 +38,9 @@ func getNotificationPermission(completion: @escaping (Bool) -> Void) {
 func fireNotification(duration: Double?) {
   let content = UNMutableNotificationContent()
   if let duration {
-    let formattedDuration = numberFormatter.string(from: NSNumber(value: duration)) ?? String(duration)
-    content.title = "\(formattedDuration) seconds"
+    let minutes = duration / 60
+    let formattedDuration = numberFormatter.string(from: NSNumber(value: minutes)) ?? String(minutes)
+    content.title = "\(formattedDuration) minute timer finished"
   } else {
     content.title = "Timer finished"
   }
@@ -67,37 +69,41 @@ struct TimerState: Equatable {
   var status: TimerStatus
   var value: Double
   var duration: Double
-  
+
   static func == (lhs: TimerState, rhs: TimerState) -> Bool {
     lhs.status == rhs.status && lhs.value == rhs.value && lhs.duration == rhs.duration
   }
 }
 
 struct MenuBar: View {
-  @State private var timers: [String: TimerState] = [:]
+  @State private var timers: [String: TimerState] = [
+    timerId: TimerState(
+      timer: nil,
+      status: .idle,
+      value: 300.0, // 5 minutes in seconds
+      duration: 300.0
+    )
+  ]
   @State private var hasPermission = false
   @State private var isFinishMsgVisible = false
-  
-
 
   func startTimer(name: String) {
     if let existingTimer = timers[name]?.timer {
       existingTimer.invalidate()
     }
-    
+
     let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
       if var state = timers[name], state.value > 0 {
         state.value -= 1.0
         timers[name] = state
-        
+
         if state.value <= 0 {
           stopTimer(name: name)
-//          print("Timer, \(timers[name])")
           fireNotification(duration: timers[name]?.duration)
         }
       }
     }
-    
+
     timers[name] = TimerState(
       timer: newTimer,
       status: .running,
@@ -110,12 +116,12 @@ struct MenuBar: View {
     if let existingTimer = timers[name]?.timer {
       existingTimer.invalidate()
     }
-    
+
     var state = timers[name] ?? TimerState(timer: nil, status: .idle, value: 0, duration: 0)
     state.timer = nil
     state.status = .finished
     timers[name] = state
-    
+
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
       if var state = timers[name] {
         state.status = .idle
@@ -128,19 +134,19 @@ struct MenuBar: View {
     stopTimer(name: name)
   }
 
-  // Extract the timer row into its own view
-  private func TimerRow(key: String, timerState: TimerState) -> some View {
+  private func timerRow(key: String, timerState: TimerState) -> some View {
     VStack {
       HStack {
         Image(systemName: "hourglass.circle.fill")
           .font(.title2)
-        
+          .padding(.leading, 20)
+
         TextField("mins", value: Binding(
-          get: { timers[key]?.value ?? 0 },
+          get: { (timers[key]?.value ?? 0) / 60 },
           set: { newValue in
             if var state = timers[key] {
-              state.value = newValue
-              state.duration = newValue
+              state.value = newValue * 60
+              state.duration = newValue * 60
               timers[key] = state
             }
           }
@@ -151,7 +157,13 @@ struct MenuBar: View {
             startTimer(name: key)
           }
           .disabled(timerState.status == .running)
-        
+          .textSelection(.enabled)
+          .onTapGesture {
+            if let textField = NSApp.keyWindow?.firstResponder as? NSTextField {
+              textField.selectText(nil)
+            }
+          }
+
         Button(action: {
           startTimer(name: key)
         }, label: {
@@ -165,21 +177,22 @@ struct MenuBar: View {
         })
         .buttonStyle(PressableButtonStyle())
         .disabled(timerState.status == .running)
+
+        HStack {
+          if timerState.status == .finished {
+            Image(systemName: "checkmark")
+              .bold()
+              .foregroundStyle(.green)
+              .shadow(color: .blue, radius: 4, x: 0, y: 0)
+              .padding(.leading, -4)
+              .opacity(isFinishMsgVisible ? 1 : 0)
+          }
+        }.frame(width: 20)
       }
-      
-      if timerState.status == .finished {
-        Text("All done")
-          .bold()
-          .foregroundColor(.pink)
-          .padding(.bottom)
-          .shadow(color: .purple, radius: 4, x: 0, y: 0)
-          .opacity(isFinishMsgVisible ? 1 : 0)
-      }
-    }
+    }.padding(.bottom, 10)
   }
 
-  // Extract permission button into its own view
-  private func PermissionButton() -> some View {
+  private func permissionButton() -> some View {
     Button {
       getNotificationPermission { isPermissionGranted in
         hasPermission = isPermissionGranted
@@ -191,28 +204,31 @@ struct MenuBar: View {
 
   var body: some View {
     VStack(alignment: .center) {
-      HStack(alignment: .center) {
-        if !hasPermission {
-          PermissionButton()
-        } else {
-          VStack {
-            ForEach(Array(timers), id: \.key) { key, timerState in
-              TimerRow(key: key, timerState: timerState)
+      ScrollView {
+        HStack(alignment: .center) {
+          if !hasPermission {
+            permissionButton()
+          } else {
+            VStack(spacing: 0) {
+              ForEach(Array(timers), id: \.key) { key, timerState in
+                timerRow(key: key, timerState: timerState)
+              }
             }
           }
         }
+        .frame(width: 180)
       }
-      .padding()
-      .frame(width: 200)
+      .frame(maxHeight: 200)
+      .padding(.top, 14)
 
       Button {
         let newId = UUID().uuidString
-        timers[newId] = TimerState(timer: nil, status: .idle, value: 1.0, duration: 1)
+        timers[newId] = TimerState(timer: nil, status: .idle, value: 300.0, duration: 300.0)
       } label: {
         Image(systemName: "plus.circle.fill")
       }
       .buttonStyle(PressableButtonStyle())
-      .padding(.bottom)
+      .padding(.init(top: 4, leading: 0, bottom: 10, trailing: 0))
     }
     .animation(.easeInOut(duration: 0.5), value: isFinishMsgVisible)
     .onAppear {
@@ -235,6 +251,5 @@ struct MenuBar: View {
 }
 
 #Preview {
-  @Previewable @State var status = TimerStatus.running
-  return MenuBar()
+  MenuBar()
 }
