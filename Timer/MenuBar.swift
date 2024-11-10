@@ -11,6 +11,7 @@ enum TimerStatus: String {
   case idle
   case running
   case finished
+  case paused
 }
 
 let numberFormatter: NumberFormatter = {
@@ -53,8 +54,8 @@ func fireNotification(duration: Double?) {
 struct PressableButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .scaleEffect(configuration.isPressed ? 0.5 : 1.0)
-      .animation(.easeInOut(duration: 0.6), value: configuration.isPressed)
+      .scaleEffect(configuration.isPressed ? 0.7 : 1.0)
+      .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
       .background(.red)
       .opacity(0.8)
       .clipShape(Capsule())
@@ -87,13 +88,41 @@ struct MenuBar: View {
   @State private var hasPermission = false
   @State private var isFinishMsgVisible = false
 
+  func toggleTimer(name: String) {
+    print("toggle status: \(timers[name]?.status.rawValue ?? "none")")
+    switch timers[name]?.status {
+      case .idle:
+        startTimer(name: name)
+      case .paused:
+        restartTimer(name: name)
+      case .running:
+        pauseTimer(name: name)
+      case .finished, .none:
+        break
+    }
+  }
+  
+  func pauseTimer(name: String) {
+    if var state = timers[name], state.value > 0 {
+      state.status = .paused
+      timers[name] = state
+    }
+  }
+
+  func restartTimer(name: String) {
+    if var state = timers[name], state.value > 0 {
+      state.status = .running
+      timers[name] = state
+    }
+  }
+
   func startTimer(name: String) {
     if let existingTimer = timers[name]?.timer {
       existingTimer.invalidate()
     }
 
     let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-      if var state = timers[name], state.value > 0 {
+      if var state = timers[name], state.value > 0, state.status == .running {
         state.value -= 1.0
         timers[name] = state
 
@@ -165,18 +194,18 @@ struct MenuBar: View {
           }
 
         Button(action: {
-          startTimer(name: key)
+          toggleTimer(name: key)
         }, label: {
           HStack {
-            Image(systemName: "chevron.right")
+            Image(systemName: timerState.status == .running ? "pause" : "chevron.right")
               .bold()
               .foregroundStyle(.primary)
+              .frame(width: 10)
               .padding(.horizontal, 6)
               .padding(.vertical, 3)
           }
         })
         .buttonStyle(PressableButtonStyle())
-        .disabled(timerState.status == .running)
 
         HStack {
           if timerState.status == .finished {
@@ -238,11 +267,11 @@ struct MenuBar: View {
     }
     .onChange(of: timers) { oldTimers, newTimers in
       if newTimers[timerId]?.status == .finished {
-        withAnimation(.easeInOut(duration: 0.5)) {
+        withAnimation(.easeInOut(duration: 0.3)) {
           isFinishMsgVisible = true
         }
       } else if oldTimers[timerId]?.status == .finished {
-        withAnimation(.easeInOut(duration: 0.5)) {
+        withAnimation(.easeInOut(duration: 0.3)) {
           isFinishMsgVisible = false
         }
       }
