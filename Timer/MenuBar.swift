@@ -70,9 +70,10 @@ struct TimerState: Equatable {
   var status: TimerStatus
   var value: Double
   var duration: Double
+  var createdAt: Date
 
   static func == (lhs: TimerState, rhs: TimerState) -> Bool {
-    lhs.status == rhs.status && lhs.value == rhs.value && lhs.duration == rhs.duration
+    lhs.status == rhs.status && lhs.value == rhs.value && lhs.duration == rhs.duration && lhs.createdAt == rhs.createdAt
   }
 }
 
@@ -82,7 +83,8 @@ struct MenuBar: View {
       timer: nil,
       status: .idle,
       value: 300.0, // 5 minutes in seconds
-      duration: 300.0
+      duration: 300.0,
+      createdAt: Date()
     )
   ]
   @State private var hasPermission = false
@@ -137,7 +139,8 @@ struct MenuBar: View {
       timer: newTimer,
       status: .running,
       value: timers[name]!.value,
-      duration: timers[name]!.value
+      duration: timers[name]!.value,
+      createdAt: Date() // TODO this is overwriting existing createdAt when called to start a paused timer
     )
   }
 
@@ -146,7 +149,7 @@ struct MenuBar: View {
       existingTimer.invalidate()
     }
 
-    var state = timers[name] ?? TimerState(timer: nil, status: .idle, value: 0, duration: 0)
+    var state = timers[name] ?? TimerState(timer: nil, status: .idle, value: 0, duration: 0, createdAt: Date())
     state.timer = nil
     state.status = .finished
     timers[name] = state
@@ -239,7 +242,7 @@ struct MenuBar: View {
             permissionButton()
           } else {
             VStack(spacing: 0) {
-              ForEach(Array(timers), id: \.key) { key, timerState in
+              ForEach(Array(timers).sorted(by: { $0.value.createdAt < $1.value.createdAt }), id: \.key) { key, timerState in
                 timerRow(key: key, timerState: timerState)
               }
             }
@@ -252,7 +255,13 @@ struct MenuBar: View {
 
       Button {
         let newId = UUID().uuidString
-        timers[newId] = TimerState(timer: nil, status: .idle, value: 300.0, duration: 300.0)
+        timers[newId] = TimerState(
+          timer: nil,
+          status: .idle,
+          value: 300.0,
+          duration: 300.0,
+          createdAt: Date()
+        )
       } label: {
         Image(systemName: "plus.circle.fill")
       }
