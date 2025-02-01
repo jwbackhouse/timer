@@ -14,6 +14,55 @@ enum TimerStatus: String {
   case paused
 }
 
+class TimeFormatter: Formatter {
+  private let formatter: DateComponentsFormatter = {
+    let f = DateComponentsFormatter()
+    f.allowedUnits = [.minute, .second]
+    f.zeroFormattingBehavior = [.pad]
+    return f
+  }()
+  
+  // Converts input into mm:ss
+  override func string(for obj: Any?) -> String? {
+    guard let seconds = obj as? Double else { return nil }
+    return formatter.string(from: TimeInterval(seconds))
+  }
+  
+  // Ensures that even while editing, the formatted string is used.
+  override func editingString(for object: Any?) -> String? {
+    return string(for: object)
+  }
+  
+  override func getObjectValue(_ obj: AutoreleasingUnsafeMutablePointer<AnyObject?>?,
+                               for string: String,
+                               errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Bool {
+    if string.contains(":") {
+      
+      
+      let parts = string.split(separator: ":").map(String.init)
+      guard parts.count == 2,
+            let minutes = Double(parts[0]),
+            let seconds = Double(parts[1]) else {
+        error?.pointee = "Invalid format. Use mm:ss" as NSString
+        return false
+      }
+      let totalSeconds = minutes * 60 + seconds
+      obj?.pointee = totalSeconds as AnyObject
+      return true
+    } else {
+      // No colon, so assume user entered minutes
+      guard let minutes = Int(string.trimmingCharacters(in: .whitespaces)) else {
+        error?.pointee = "Invalid number" as NSString
+        return false
+      }
+      let totalSeconds = minutes * 60
+      obj?.pointee = totalSeconds as AnyObject
+      return true
+    }
+  }
+}
+
+
 let numberFormatter: NumberFormatter = {
   let formatter = NumberFormatter()
   formatter.numberStyle = .decimal
@@ -22,6 +71,7 @@ let numberFormatter: NumberFormatter = {
   formatter.maximumFractionDigits = 1
   return formatter
 }()
+
 
 func getNotificationPermission(completion: @escaping (Bool) -> Void) {
   UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { success, error in
@@ -39,9 +89,9 @@ func getNotificationPermission(completion: @escaping (Bool) -> Void) {
 func fireNotification(duration: Double?) {
   let content = UNMutableNotificationContent()
   if let duration {
-    let minutes = duration / 60
-    let formattedDuration = numberFormatter.string(from: NSNumber(value: minutes)) ?? String(minutes)
-    content.title = "\(formattedDuration) minute timer finished"
+    let timeFormatter = TimeFormatter()
+    let formattedDuration = timeFormatter.string(for: TimeInterval(duration)) ?? ""
+    content.title = "\(formattedDuration) minute timer"
   } else {
     content.title = "Timer finished"
   }
@@ -71,7 +121,7 @@ struct TimerState: Equatable {
   var value: Double
   var duration: Double
   var createdAt: Date
-
+  
   static func == (lhs: TimerState, rhs: TimerState) -> Bool {
     lhs.status == rhs.status && lhs.value == rhs.value && lhs.duration == rhs.duration && lhs.createdAt == rhs.createdAt
   }
@@ -89,9 +139,9 @@ struct MenuBar: View {
   ]
   @State private var hasPermission = false
   @State private var isFinishMsgVisible = false
-
+  
+  
   func toggleTimer(name: String) {
-    print("toggle status: \(timers[name]?.status.rawValue ?? "none")")
     switch timers[name]?.status {
       case .idle:
         startTimer(name: name)
@@ -110,31 +160,31 @@ struct MenuBar: View {
       timers[name] = state
     }
   }
-
+  
   func restartTimer(name: String) {
     if var state = timers[name], state.value > 0 {
       state.status = .running
       timers[name] = state
     }
   }
-
+  
   func startTimer(name: String) {
     if let existingTimer = timers[name]?.timer {
       existingTimer.invalidate()
     }
-
+    
     let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
       if var state = timers[name], state.value > 0, state.status == .running {
         state.value -= 1.0
         timers[name] = state
-
+        
         if state.value <= 0 {
           stopTimer(name: name)
           fireNotification(duration: timers[name]?.duration)
         }
       }
     }
-
+    
     timers[name] = TimerState(
       timer: newTimer,
       status: .running,
@@ -143,17 +193,17 @@ struct MenuBar: View {
       createdAt: Date() // TODO this is overwriting existing createdAt when called to start a paused timer
     )
   }
-
+  
   func stopTimer(name: String) {
     if let existingTimer = timers[name]?.timer {
       existingTimer.invalidate()
     }
-
+    
     var state = timers[name] ?? TimerState(timer: nil, status: .idle, value: 0, duration: 0, createdAt: Date())
     state.timer = nil
     state.status = .finished
     timers[name] = state
-
+    
     DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
       if var state = timers[name] {
         state.status = .idle
@@ -161,41 +211,42 @@ struct MenuBar: View {
       }
     }
   }
-
+  
   func onDisappear(name: String) {
     stopTimer(name: name)
   }
-
+  
   private func timerRow(key: String, timerState: TimerState) -> some View {
     VStack {
       HStack {
         Image(systemName: "hourglass.circle.fill")
           .font(.title2)
           .padding(.leading, 20)
-
-        TextField("mins", value: Binding(
-          get: { (timers[key]?.value ?? 0) / 60 },
-          set: { newValue in
-            if var state = timers[key] {
-              state.value = newValue * 60
-              state.duration = newValue * 60
-              timers[key] = state
-            }
+        TextField("mins",
+                  value: Binding(
+                    get: { timers[key]?.value ?? 0},
+                    set: { newValue in
+                      if var state = timers[key] {
+                        state.value = newValue
+                        state.duration = newValue
+                        timers[key] = state
+                      }
+                    }
+                  ),
+                  formatter: TimeFormatter())
+        .textFieldStyle(RoundedBorderTextFieldStyle())
+        .frame(width: 60)
+        .onSubmit {
+          startTimer(name: key)
+        }
+        .disabled(timerState.status == .running)
+        .textSelection(.enabled)
+        .onTapGesture {
+          if let textField = NSApp.keyWindow?.firstResponder as? NSTextField {
+            textField.selectText(nil)
           }
-        ), formatter: numberFormatter)
-          .textFieldStyle(RoundedBorderTextFieldStyle())
-          .frame(width: 60)
-          .onSubmit {
-            startTimer(name: key)
-          }
-          .disabled(timerState.status == .running)
-          .textSelection(.enabled)
-          .onTapGesture {
-            if let textField = NSApp.keyWindow?.firstResponder as? NSTextField {
-              textField.selectText(nil)
-            }
-          }
-
+        }
+        
         Button(action: {
           toggleTimer(name: key)
         }, label: {
@@ -209,7 +260,7 @@ struct MenuBar: View {
           }
         })
         .buttonStyle(PressableButtonStyle())
-
+        
         HStack {
           if timerState.status == .finished {
             Image(systemName: "checkmark")
@@ -223,7 +274,7 @@ struct MenuBar: View {
       }
     }.padding(.bottom, 10)
   }
-
+  
   private func permissionButton() -> some View {
     Button {
       getNotificationPermission { isPermissionGranted in
@@ -233,7 +284,7 @@ struct MenuBar: View {
       Text("Get permission")
     }
   }
-
+  
   var body: some View {
     VStack(alignment: .center) {
       ScrollView {
@@ -252,7 +303,7 @@ struct MenuBar: View {
       }
       .frame(maxHeight: 200)
       .padding(.top, 14)
-
+      
       Button {
         let newId = UUID().uuidString
         timers[newId] = TimerState(
