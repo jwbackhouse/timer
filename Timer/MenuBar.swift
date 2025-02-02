@@ -7,7 +7,7 @@
 import SwiftUI
 import UserNotifications
 
-enum TimerStatus: String {
+enum TimerStatus: Equatable {
   case idle
   case running
   case finished
@@ -120,10 +120,15 @@ struct TimerState: Equatable {
   var status: TimerStatus
   var value: Double
   var duration: Double
+  var isHovered: Bool
   var createdAt: Date
   
   static func == (lhs: TimerState, rhs: TimerState) -> Bool {
-    lhs.status == rhs.status && lhs.value == rhs.value && lhs.duration == rhs.duration && lhs.createdAt == rhs.createdAt
+    lhs.status == rhs.status &&
+    lhs.value == rhs.value &&
+    lhs.duration == rhs.duration &&
+    lhs.isHovered == rhs.isHovered &&
+    lhs.createdAt == rhs.createdAt
   }
 }
 
@@ -134,6 +139,7 @@ struct MenuBar: View {
       status: .idle,
       value: 300.0, // 5 minutes in seconds
       duration: 300.0,
+      isHovered: false,
       createdAt: Date()
     )
   ]
@@ -190,6 +196,7 @@ struct MenuBar: View {
       status: .running,
       value: timers[name]!.value,
       duration: timers[name]!.value,
+      isHovered: false,
       createdAt: Date() // TODO this is overwriting existing createdAt when called to start a paused timer
     )
   }
@@ -199,7 +206,7 @@ struct MenuBar: View {
       existingTimer.invalidate()
     }
     
-    var state = timers[name] ?? TimerState(timer: nil, status: .idle, value: 0, duration: 0, createdAt: Date())
+    var state = timers[name] ?? TimerState(timer: nil, status: .idle, value: 0, duration: 0, isHovered: false, createdAt: Date())
     state.timer = nil
     state.status = .finished
     timers[name] = state
@@ -219,9 +226,19 @@ struct MenuBar: View {
   private func timerRow(key: String, timerState: TimerState) -> some View {
     VStack {
       HStack {
-        Image(systemName: "hourglass.circle.fill")
-          .font(.title2)
-          .padding(.leading, 20)
+        Image(
+          systemName: timerState.isHovered && timers.count > 1 ? "trash.circle.fill" : "hourglass.circle.fill"
+        )
+        .font(.title2)
+        .padding(.leading, 20)
+        .onHover { hovering in
+          withAnimation {
+            if var state = timers[key] {
+              state.isHovered = hovering
+              timers[key] = state
+            }
+          }
+        }
         TextField("mins",
                   value: Binding(
                     get: { timers[key]?.value ?? 0},
@@ -311,6 +328,7 @@ struct MenuBar: View {
           status: .idle,
           value: 300.0,
           duration: 300.0,
+          isHovered: false,
           createdAt: Date()
         )
       } label: {
