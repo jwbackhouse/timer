@@ -219,6 +219,10 @@ struct MenuBar: View {
     }
   }
   
+  func deleteTimer(name: String) {
+    timers.removeValue(forKey: name)
+  }
+  
   func onDisappear(name: String) {
     stopTimer(name: name)
   }
@@ -236,6 +240,13 @@ struct MenuBar: View {
             if var state = timers[key] {
               state.isHovered = hovering
               timers[key] = state
+            }
+          }
+        }
+        .onTapGesture {
+          if timers.count > 1 {
+            withAnimation {
+              deleteTimer(name: key)
             }
           }
         }
