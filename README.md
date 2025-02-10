@@ -10,6 +10,8 @@ The apps I found on the App Store were either more complicated that I needed, di
 
 ## Status
 
-Currently WIP - features are largely finished, but needs some polishing.
+Currently WIP - features are largely finished, but UI needs some polishing.
+
+Code needs tidying up and modularising.
 
 Next step is to publish it on the App Store.
