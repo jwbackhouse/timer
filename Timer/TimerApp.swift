@@ -12,8 +12,6 @@ struct TimerApp: App {
   var body: some Scene {
     MenuBarExtra("Timertronics", systemImage: "deskclock") {
       MenuBar()
-      //      ContentView()
-      //        .frame(width: 300, height: 150)
     }.menuBarExtraStyle(.window)
 
     WindowGroup {
